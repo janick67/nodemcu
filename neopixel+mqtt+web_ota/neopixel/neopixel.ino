@@ -5,11 +5,31 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <PubSubClient.h>
+
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+  #include <avr/power.h>
+#endif
+
+// Which pin on the Arduino is connected to the NeoPixels?
+// On a Trinket or Gemma we suggest changing this to 1
+#define PIN            5
+
+// How many NeoPixels are attached to the Arduino?
+#define NUMPIXELS      60
+
+// When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
+// Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
+// example for more information on possible values.
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
  
- const char* host = "esp8266-webupdate";
-const char* ssid = "D-Link1658";
-const char* password = "RdzawkaPaSs67";
-const char* mqttServer = "192.168.1.100";
+const char* host = "esp8266-webupdate";
+const char* ssid = "Blachotrapez";
+const char* password = "blachotrapez2016";
+//const char* ssid = "D-Link1658";
+//const char* password = "RdzawkaPaSs67";
+const char* mqttServer = "rdzawka67.ddns.net";
 const int mqttPort = 1883;
 
 ESP8266WebServer server(80);
@@ -23,6 +43,8 @@ void setup(void){
   Serial.begin(115200);
   Serial.println();
   Serial.println("Booting Sketch...");
+  Serial.print("Połącz z: ");
+  Serial.println(mqttServer);
   WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid, password);
   if(WiFi.waitForConnectResult() == WL_CONNECTED){
@@ -88,40 +110,58 @@ void setup(void){
   }
  
   client.publish("esp/test", "Hello from ESP8266");
-  client.subscribe("#");
- 
+  client.subscribe("nodemcu/#");
+  pixels.begin(); // This initializes the NeoPixel library.
 }
  
 void callback(char* topic, byte* payload, unsigned int length) {
-
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  
 
   if(!strcmp(topic,"nodemcu/test"))
   {
-    if((char)payload[0] == '1'){
+    if(message == "1"){
       digitalWrite(LED_BUILTIN, LOW);
     }
-    if((char)payload[0] == '0'){
+    if(message == "0"){
       digitalWrite(LED_BUILTIN, HIGH);
     }
   }
- 
-  Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
- 
-  Serial.print("Message:");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+
+  if(!strcmp(topic,"nodemcu/led"))
+  {
+    neopixelallhex(message);
   }
  
-  Serial.println();
-  Serial.println("-----------------------");
- 
-}
- 
+// 
+//  Serial.print("Message arrived in topic: ");
+//  Serial.println(topic);
+// 
+//  Serial.print("Message:");
+//  for (int i = 0; i < length; i++) {
+//    Serial.print((char)payload[i]);
+//  }
+// 
+//  Serial.println();
+//  Serial.println("-----------------------");
+} 
 
 void loop(void){
   server.handleClient();
   client.loop();
-  delay(1);
+  delayMicroseconds(1000);
+}
+
+
+void neopixelallhex(String kolor){
+  Serial.print("zmieniam kolor na: ");
+  Serial.println(kolor);
+  for(int i=0;i<NUMPIXELS;i++){
+    pixels.setPixelColor(i, strtoul (kolor.c_str(), NULL, 0));
+  }
+  pixels.show(); // This sends the updated pixel color to the hardware.
 }
 
