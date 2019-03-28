@@ -3,7 +3,7 @@
 
 func wyslij($sFileToUpload = @ScriptFullPath)
  ;<- Set correct file location here (current choice uploads this script)
-$sAddress = "http://192.168.1.101/update" ;<- Set correct address here.
+$sAddress = "http://192.168.43.161/update" ;<- Set correct address here.
 ; Form to fill (page doesn't have transparent form)
 Local $sForm = _
         '<form action="' & $sAddress &'" method="post" enctype="multipart/form-data">' & _
@@ -21,11 +21,11 @@ $sHTML = _WinHttpSimpleFormFill($hConnect, $hOpen, _
         Default, _
         "name:update", $sFileToUpload)
 
-If @error Then
-    ConsoleWrite("Error number = " & @error)
-Else
-    ConsoleWrite("Result: " & @CRLF & $sHTML)
-EndIf
+;~ If @error Then
+;~     MsgBox(4096, "Error", "Error number = " & @error)
+;~ Else
+;~     MsgBox(64, "Success", "Result: " & @CRLF & $sHTML)
+;~ EndIf
 
 ; Close handles
 _WinHttpCloseHandle($hConnect)
@@ -34,11 +34,10 @@ _WinHttpCloseHandle($hOpen)
 EndFunc
 
 while 1
-	$nazwa_pliku = "lamp1.ino.nodemcu.bin"
+	$nazwa_pliku = "mqtt.ino.nodemcu.bin"
 if FileExists($nazwa_pliku) Then
 	ConsoleWrite("znalaz³em plik, wysy³am")
 	wyslij($nazwa_pliku)
-	MsgBox(0,0,"")
 	FileDelete($nazwa_pliku)
 EndIf
 Sleep(100)
