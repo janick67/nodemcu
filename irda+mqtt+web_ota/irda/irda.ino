@@ -6,10 +6,25 @@
 #include <ESP8266WebServer.h>
 #include <PubSubClient.h>
 #include <IRrecv.h>
+#include "DHTesp.h"
+#include <Wire.h>
+#include <BH1750.h>
+
+BH1750 lightMeter;
+
+#ifdef ESP32
+#pragma message(THIS EXAMPLE IS FOR ESP8266 ONLY!)
+#error Select ESP8266 board.
+#endif
+
+
+DHTesp dht;
 
 int RECV_PIN = 14;        // the pin where you connect the output pin of IR sensor 
 IRrecv irrecv(RECV_PIN);
 decode_results results;
+
+int i =0 ;
  
 const char* host = "esp8266-webupdate";
 //const char* ssid = "Blachotrapez";
@@ -26,8 +41,6 @@ PubSubClient client(espClient);
 const char* serverIndex = "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form> <h1>Simple NodeMCU Web Server test</h1>";
 
 void setup(void){
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
   Serial.begin(115200);
   Serial.println();
   Serial.println("Booting Sketch...");
@@ -84,7 +97,7 @@ void setup(void){
     while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
  
-    if (client.connect("ESP8266Client")) {
+    if (client.connect("Irda")) {
  
       Serial.println("connected");  
  
@@ -97,9 +110,14 @@ void setup(void){
     }
   }
  
-  client.publish("esp/test", "Hello from ESP8266");
+  client.publish("esp/test", "Hello from Irda");
   client.subscribe("#");
-   irrecv.enableIRIn();
+  irrecv.enableIRIn();
+  dht.setup(12, DHTesp::DHT11); // Connect DHT sensor to GPIO 17
+  Wire.begin(5,4);
+  lightMeter.begin();
+
+  Serial.println(F("BH1750 Test begin"));
 }
  
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -133,12 +151,53 @@ void irloop(){
     {
     unsigned int ircode = results.value;
     Serial.print("ircode: ");
-    Serial.println(ircode);
+    //Serial.println(ircode);
     char* str = "";
     sprintf(str,"%d",ircode);
+    Serial.println("");
+     while (!client.connected()) {
+      Serial.println("Connecting to MQTT...");
+ 
+     if (client.connect("ESP8266Client")) {
+ 
+      Serial.println("connected");  
+ 
+     } else {
+ 
+      Serial.print("failed with state");
+      Serial.print(client.state());
+      delay(2000);
+ 
+    }
+  }
     client.publish("nodemcu/ir", str);
     irrecv.resume();  // Receive the next value
     }
+}
+
+void dhtloop()
+{
+  float humidity = dht.getHumidity();
+  float temperature = dht.getTemperature();
+
+  if(dht.getStatusString() == "OK"){
+  char* str = "";
+  sprintf(str,"%.0f",humidity);
+  client.publish("nodemcu/humidity", str);
+  str = "";
+  sprintf(str,"%3.2f",temperature);
+  client.publish("nodemcu/temp", str);
+  }else
+  {
+    Serial.print(dht.getStatusString()); 
+  }
+}
+
+void lightloop(){
+  float lux = lightMeter.readLightLevel();
+  char*  str = "";
+  sprintf(str,"%5.2f",lux);
+  client.publish("nodemcu/light", str);
 }
  
 
@@ -146,6 +205,13 @@ void loop(void){
   server.handleClient();
   client.loop();
   irloop();
+  if (i > 10000)
+  {
+    dhtloop();
+    lightloop();
+    i = 0;
+  }
+  i++;
   delay(1);
 }
 

@@ -6,7 +6,7 @@
 #include <ESP8266WebServer.h>
 #include <PubSubClient.h>
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
+#ifdef __AVR__/
   #include <avr/power.h>
 #endif
 
@@ -50,7 +50,7 @@ int red = 0, green = 0, blue = 0;
 
 void setup(void){
   pinMode(PIN_SWITCH, INPUT);
-  attachInterrupt(digitalPinToInterrupt(PIN_SWITCH), handleInterrupt, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(PIN_SWITCH), handleInterrupt, CHANGE);
   pinMode(PIN_LAMP, INPUT);
   digitalWrite( PIN_LAMP, LOW );
   Serial.begin(115200);
@@ -109,7 +109,7 @@ void setup(void){
     while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
  
-    if (client.connect("ESP8266Client")) {
+    if (client.connect("Lamp1")) {
  
       Serial.println("connected");  
  
@@ -122,7 +122,7 @@ void setup(void){
     }
   }
  
-  client.publish("esp/test", "Hello from ESP8266");
+  client.publish("esp/test", "Hello from Lamp1");
   client.subscribe("/lamp/ster/lampa");
   client.subscribe("/lamp/led/#");
   pixels.begin(); // This initializes the NeoPixel library.
@@ -140,12 +140,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
   {
     if(message == "1"){
       pinMode( PIN_LAMP, OUTPUT ); // włączone
+      client.publish("/nodemcu/lampa","Włączyłem");
       lampa_real = 1;
     }
     if(message == "0"){
       pinMode( PIN_LAMP, INPUT ); // wyłączone
+      client.publish("/nodemcu/lampa","Wyłączyłem");
       lampa_real = 0;
     }
+  }
+
+  if(!strcmp(topic,"/lamp/led/color"))
+  {
+    neopixelallhex(message);
   }
 
   if(!strcmp(topic,"/lamp/led/red"))
@@ -162,31 +169,32 @@ void callback(char* topic, byte* payload, unsigned int length) {
   {
     blue = atoi(message.c_str());
     neopixelall(red,green,blue);
+    client.publish("/nodemcu/kolor","Zmieniam kolor");
+    Serial.print("Zmieniam kolor na: ");
+    Serial.print(red);
+    Serial.print(" ");
+    Serial.print(green);
+    Serial.print(" ");
+    Serial.println(blue);
   }
- 
- 
-//  Serial.print("Message arrived in topic: ");
-//  Serial.println(topic);
-// 
-//  Serial.print("Message:");
-//  for (int i = 0; i < length; i++) {
-//    Serial.print((char)payload[i]);
-//  }
-// 
-//  Serial.println();
-//  Serial.println("-----------------------");
+  client.publish("/nodemcu/kolor",message.c_str());
+  Serial.print(topic);
+  Serial.print(": ");
+  Serial.println(message);
+  
 } 
 
 void loop(void){
   server.handleClient();
   client.loop();
-  delay(10);
+  handleInterrupt();
+  delay(1);
 }
 
 
 void handleInterrupt() {
   int suma;
-  for (int i = 0; i < 40; i++){
+  for (int i = 0; i < 10; i++){
   //Serial.print(i);
   //Serial.print("    Digittal: ");
   int dig = digitalRead(PIN_SWITCH);
@@ -194,7 +202,7 @@ void handleInterrupt() {
   suma += dig;
   }
   int stan = 0;
-  if (suma < 40/3) stan = 1;
+  if (suma < 10/3) stan = 1;
   if (stan == lampa_switch){
     return;
   }else{
@@ -207,8 +215,9 @@ void handleInterrupt() {
     pinMode( PIN_LAMP, INPUT ); // wylączone
     client.publish("/lamp/state/lampa","0");
     neopixelall(0,0,0);
-//    Serial.println("Swiatlo off przerwanie");
+    Serial.println("Swiatlo off przerwanie");
   }else{
+   // neopixelall(30,255,0);
     pinMode( PIN_LAMP, OUTPUT ); // włączone
     client.publish("/lamp/state/lampa","1");
 //    Serial.println("Swiatlo on przerwanie");
@@ -224,33 +233,6 @@ void neopixelall(int red, int green, int blue){
   }
   kierunek *= -1;
 }
-
-//void mieszanie(long kolor1, long kolor2){
-//  for (int i=0; i < NUMPIXELS; i++){
-//    if (i == (NUMPIXELS-1)/2){
-//      kolor1 += kolor2;
-//      kolor2 = kolor1;
-//      Serial.println("Byłem tu");
-//      Serial.println("Byłem tu");
-//      Serial.println("Byłem tu");
-//      Serial.println("Byłem tu");
-//      Serial.println("Byłem tu");
-//      Serial.println("Byłem tu");
-//      delay(100);
-//    }
-//    char* str = "";
-//    Serial.print("kolor1: ");
-//    sprintf(str,"%06x", kolor1);
-//    Serial.println(str);
-//    Serial.print("kolor2: ");
-//    sprintf(str,"%06x", kolor2);
-//    Serial.println(str);
-//    pixels.setPixelColor(i, kolor1);
-//    pixels.setPixelColor(NUMPIXELS-1-i,kolor2);         
-//    delay(15);
-//    pixels.show(); // This sends the updated pixel color to the hardware.
-//  }
-//}
 
 void wlewo(int red, int green, int blue){
   for(int i=NUMPIXELS-1;i>=0;i--){
@@ -269,11 +251,27 @@ void wprawo(int red, int green, int blue){
 }
 
 void neopixelallhex(String kolor){
-//  Serial.print("zmieniam kolor na: ");
-//  Serial.println(kolor);
-  for(int i=0;i<NUMPIXELS;i++){
-    pixels.setPixelColor(i, strtoul (kolor.c_str(), NULL, 0));
+  if (kierunek > 0){
+    wprawohex(kolor);
+  }else{
+    wlewohex(kolor);
   }
-  pixels.show(); // This sends the updated pixel color to the hardware.
+  kierunek *= -1;
+}
+
+void wlewohex(String kolor){
+  for(int i=NUMPIXELS-1;i>=0;i--){
+    pixels.setPixelColor(i, strtoul (kolor.c_str(), NULL, 0));       // zgodnie ze wskazówkami zegara
+    delay(5);
+      pixels.show(); // This sends the updated pixel color to the hardware.
+  }
+}
+
+void wprawohex(String kolor){
+  for(int i=0;i<NUMPIXELS;i++){
+    pixels.setPixelColor(i, strtoul (kolor.c_str(), NULL, 0));                              // zgodnie ze wskazówkami zegara
+    delay(5);
+      pixels.show(); // This sends the updated pixel color to the hardware.
+  }
 }
 
