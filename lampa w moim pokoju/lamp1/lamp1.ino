@@ -10,14 +10,15 @@
   #include <avr/power.h>
 #endif
 
+String ESPName = "lamp";
+
 #define PIN_SWITCH      0
 #define PIN_LAMP        14
 int lampa_switch = 0;
 int lampa_real = 0;
 
 int kierunek = 1; // 1 lub -1
-
-
+int i = 0;
 
 // Which pin on the Arduino is connected to the NeoPixels?
 // On a Trinket or Gemma we suggest changing this to 1
@@ -44,7 +45,7 @@ const int mqttPort = 1883;
 ESP8266WebServer server(80);
 WiFiClient espClient;
 PubSubClient client(espClient);
-const char* serverIndex = "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form> <h1>Simple NodeMCU Web Server test2</h1>";
+const char* serverIndex = "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form> <h1>Simple NodeMCU Web Server lamp</h1>";
 
 int red = 0, green = 0, blue = 0;
 
@@ -58,7 +59,7 @@ void setup(void){
   Serial.println("Booting Sketch...");
   Serial.print("Połącz z: ");
   Serial.println(mqttServer);
-  WiFi.mode(WIFI_AP_STA);
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   if(WiFi.waitForConnectResult() == WL_CONNECTED){
     
@@ -109,8 +110,8 @@ void setup(void){
     while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
  
-    if (client.connect("Lamp1")) {
- 
+    if (client.connect(ESPName.c_str())) {
+      
       Serial.println("connected");  
  
     } else {
@@ -121,13 +122,20 @@ void setup(void){
  
     }
   }
- 
-  client.publish("esp/test", "Hello from Lamp1");
+  
+    mqttSay("START", "Hello from "+ESPName);
+    mqttSay("ip", WiFi.localIP().toString());
   client.subscribe("/lamp/ster/lampa");
   client.subscribe("/lamp/led/#");
   pixels.begin(); // This initializes the NeoPixel library.
 
 }
+
+  void mqttSay(String topic, String message)
+  {
+    client.publish(("/"+ESPName+"/"+topic).c_str(), message.c_str());
+  }
+ 
  
 void callback(char* topic, byte* payload, unsigned int length) {
   String message = "";
@@ -140,12 +148,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
   {
     if(message == "1"){
       pinMode( PIN_LAMP, OUTPUT ); // włączone
-      client.publish("/nodemcu/lampa","Włączyłem");
+      mqttSay("OFF","Włączyłem");
+      mqttSay("state/lampa","1");
       lampa_real = 1;
     }
     if(message == "0"){
       pinMode( PIN_LAMP, INPUT ); // wyłączone
-      client.publish("/nodemcu/lampa","Wyłączyłem");
+      mqttSay("ON","Wyłączyłem");
+      mqttSay("state/lampa","0");
       lampa_real = 0;
     }
   }
@@ -169,7 +179,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   {
     blue = atoi(message.c_str());
     neopixelall(red,green,blue);
-    client.publish("/nodemcu/kolor","Zmieniam kolor");
+    mqttSay("kolor","Zmieniam kolor");
     Serial.print("Zmieniam kolor na: ");
     Serial.print(red);
     Serial.print(" ");
@@ -177,7 +187,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print(" ");
     Serial.println(blue);
   }
-  client.publish("/nodemcu/kolor",message.c_str());
+  mqttSay("kolor",message.c_str());
   Serial.print(topic);
   Serial.print(": ");
   Serial.println(message);
@@ -185,6 +195,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
 } 
 
 void loop(void){
+    if (i > 60000)
+    {
+    checkMqtt();
+    mqttSay("stan","OK");
+    i = 0;
+    }
+   i++;
   server.handleClient();
   client.loop();
   handleInterrupt();
@@ -193,16 +210,16 @@ void loop(void){
 
 
 void handleInterrupt() {
-  int suma;
-  for (int i = 0; i < 10; i++){
+  int suma = 0;
+  for (int i = 0; i < 20; i++){
   //Serial.print(i);
   //Serial.print("    Digittal: ");
   int dig = digitalRead(PIN_SWITCH);
- // Serial.println(dig);
   suma += dig;
   }
+  //Serial.println(suma);
   int stan = 0;
-  if (suma < 10/3) stan = 1;
+  if (suma < 20/3) stan = 1;
   if (stan == lampa_switch){
     return;
   }else{
@@ -213,13 +230,13 @@ void handleInterrupt() {
 
   if (lampa_real) {
     pinMode( PIN_LAMP, INPUT ); // wylączone
-    client.publish("/lamp/state/lampa","0");
+    mqttSay("state/lampa","0");
     neopixelall(0,0,0);
     Serial.println("Swiatlo off przerwanie");
   }else{
    // neopixelall(30,255,0);
     pinMode( PIN_LAMP, OUTPUT ); // włączone
-    client.publish("/lamp/state/lampa","1");
+    mqttSay("state/lampa","1");
 //    Serial.println("Swiatlo on przerwanie");
   }
 }
@@ -273,5 +290,51 @@ void wprawohex(String kolor){
     delay(5);
       pixels.show(); // This sends the updated pixel color to the hardware.
   }
+}
+
+
+void checkMqtt(){
+  if(!(WiFi.waitForConnectResult() == WL_CONNECTED) ) WIFI_Connect();
+     while (!client.connected()) {
+      Serial.println("Connecting to MQTT...");
+ 
+     if (client.connect(ESPName.c_str())) {
+ 
+      Serial.println("connected");  
+        mqttSay("START", "Hello from "+ESPName);
+        mqttSay("ip", WiFi.localIP().toString());
+      return;
+ 
+     } else {
+      
+      Serial.print("failed with state");
+      Serial.print(client.state());
+      
+      delay(500);
+      return;
+ 
+    }
+ }
+}
+
+void WIFI_Connect()
+{
+  digitalWrite(2,1);
+  WiFi.disconnect();
+  Serial.println("Booting Sketch...");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+    // Wait for connection
+  for (int i = 0; i < 25; i++)
+  {
+    if ( WiFi.status() != WL_CONNECTED ) {
+      delay ( 250 );
+      digitalWrite(2,0);
+      Serial.print ( "." );
+      delay ( 250 );
+      digitalWrite(2,1);
+    }
+  }
+  digitalWrite(2,0);
 }
 
